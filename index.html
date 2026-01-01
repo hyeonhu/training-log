@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Training Log</title>
+  <style>
+    :root{
+      --bg:#0b0e14; --card:#121826; --muted:#9aa4b2; --text:#e6edf3;
+      --line:#223049; --accent:#7aa2f7; --good:#22c55e; --bad:#ef4444; --warn:#f59e0b;
+      --chip:#1b2538;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
+      background:linear-gradient(180deg,#090b10,#0b0e14 40%,#090b10); color:var(--text);}
+    header{position:sticky;top:0;z-index:5;background:rgba(11,14,20,.85);backdrop-filter:blur(10px);
+      border-bottom:1px solid rgba(255,255,255,.06);}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px;}
+    .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap}
+    .tab{border:1px solid rgba(255,255,255,.12); background:transparent; color:var(--text);
+      padding:10px 12px;border-radius:12px;cursor:pointer}
+    .tab.active{background:rgba(122,162,247,.15);border-color:rgba(122,162,247,.35)}
+    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted);font-size:12px}
+    .grid{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:980px){.grid.two{grid-template-columns:1.25fr .75fr}}
+    .card{background:rgba(18,24,38,.85);border:1px solid rgba(255,255,255,.08);border-radius:18px;
+      padding:14px; box-shadow:0 10px 25px rgba(0,0,0,.35)}
+    h2{margin:0 0 10px;font-size:18px}
+    h3{margin:0 0 8px;font-size:14px;color:var(--muted);font-weight:600}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input,select,textarea{width:100%;padding:10px 10px;border-radius:12px;border:1px solid rgba(255,255,255,.12);
+      background:rgba(0,0,0,.25); color:var(--text); outline:none}
+    textarea{min-height:80px;resize:vertical}
+    button{border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:var(--text);
+      padding:10px 12px;border-radius:12px;cursor:pointer}
+    button.primary{background:rgba(122,162,247,.18);border-color:rgba(122,162,247,.35)}
+    button.danger{background:rgba(239,68,68,.14);border-color:rgba(239,68,68,.35)}
+    button.ghost{background:transparent}
+    .btnrow{display:flex;gap:8px;flex-wrap:wrap}
+    table{width:100%;border-collapse:collapse;overflow:hidden;border-radius:14px;border:1px solid rgba(255,255,255,.08)}
+    th,td{padding:10px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px}
+    th{color:var(--muted);text-align:left;background:rgba(255,255,255,.03)}
+    tr:hover td{background:rgba(255,255,255,.02)}
+    .right{text-align:right}
+    .chips{display:flex;gap:6px;flex-wrap:wrap}
+    .chip{background:rgba(27,37,56,.9);border:1px solid rgba(255,255,255,.10);
+      padding:6px 10px;border-radius:999px;font-size:12px;color:var(--muted)}
+    .kpi{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    @media(min-width:980px){.kpi{grid-template-columns:repeat(4,1fr)}}
+    .kpi .box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+      border-radius:16px;padding:12px}
+    .kpi .big{font-size:20px;font-weight:700}
+    .kpi .small{font-size:12px;color:var(--muted)}
+    .good{color:var(--good)} .bad{color:var(--bad)} .warn{color:var(--warn)}
+    canvas{width:100%;height:320px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.08);
+      border-radius:16px}
+    .muted{color:var(--muted)}
+    .hr{height:1px;background:rgba(255,255,255,.08);margin:12px 0}
+    .inline{display:grid;grid-template-columns:1fr;gap:10px}
+    @media(min-width:980px){.inline{grid-template-columns:repeat(3,1fr)}}
+    .toggle{display:flex;align-items:center;gap:8px}
+    .toggle input{width:auto}
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap row" style="justify-content:space-between">
+    <div class="row">
+      <strong style="font-size:16px">Training Log</strong>
+      <span class="pill" id="pillStatus">로컬 저장</span>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="today">Today</button>
+      <button class="tab" data-tab="setup">Setup</button>
+      <button class="tab" data-tab="history">History</button>
+      <button class="tab" data-tab="charts">Charts</button>
+      <button class="tab" data-tab="backup">Backup</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- TODAY -->
+  <section id="tab-today" class="grid two">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2>오늘 운동</h2>
+        <div class="chips">
+          <span class="chip" id="todayDateChip"></span>
+          <span class="chip" id="todaySplitChip"></span>
+        </div>
+      </div>
+
+      <div class="inline">
+        <div>
+          <label>날짜</label>
+          <input id="todayDate" type="date"/>
+        </div>
+        <div>
+          <label>분할(Workout Day)</label>
+          <select id="todaySplit"></select>
+        </div>
+        <div>
+          <label>옵션</label>
+          <div class="toggle">
+            <input id="toggleActual" type="checkbox"/>
+            <span class="muted">실제 무게/반복 입력(선택)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="btnrow" style="margin-top:10px">
+        <button class="primary" id="btnBuildToday">오늘 루틴 생성</button>
+        <button id="btnMarkAllSuccess">전체 성공</button>
+        <button id="btnMarkAllFail">전체 실패</button>
+        <button class="danger" id="btnClearToday">초기화</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <div style="overflow:auto">
+        <table id="todayTable">
+          <thead>
+            <tr>
+              <th style="min-width:140px">운동</th>
+              <th style="min-width:80px">부위</th>
+              <th class="right">세트</th>
+              <th class="right">목표 무게</th>
+              <th class="right">목표 반복</th>
+              <th style="min-width:120px">결과</th>
+              <th class="right actualCol" style="display:none">실제 무게</th>
+              <th class="right actualCol" style="display:none">실제 반복</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="btnrow" style="margin-top:10px">
+        <button class="primary" id="btnSaveToday">오늘 기록 저장</button>
+      </div>
+      <div class="muted" style="margin-top:8px">
+        * 결과는 각 운동 1개만 선택하면 저장됩니다. (세트 수만큼 자동 누적)
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>요약</h2>
+      <div class="kpi">
+        <div class="box">
+          <div class="big" id="kpiExercises">0</div>
+          <div class="small">오늘 운동 수</div>
+        </div>
+        <div class="box">
+          <div class="big" id="kpiSets">0</div>
+          <div class="small">총 세트</div>
+        </div>
+        <div class="box">
+          <div class="big" id="kpiVolume">0</div>
+          <div class="small">총 볼륨(kg·reps)</div>
+        </div>
+        <div class="box">
+          <div class="big" id="kpiSuccess" >0</div>
+          <div class="small">성공 개수</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <h3>오늘 목표(요약)</h3>
+      <div class="muted" id="todaySummary"></div>
+    </div>
+  </section>
+
+  <!-- SETUP -->
+  <section id="tab-setup" class="grid two" style="display:none">
+    <div class="card">
+      <h2>분할 / 부위</h2>
+      <div class="inline">
+        <div>
+          <label>분할 추가</label>
+          <div class="row">
+            <input id="newSplit" placeholder="예: 무분할, 상체, 하체, 푸쉬, 풀"/>
+            <button id="btnAddSplit">추가</button>
+          </div>
+          <div class="hr"></div>
+          <h3>분할 목록</h3>
+          <div id="splitList" class="chips"></div>
+        </div>
+        <div>
+          <label>부위 추가</label>
+          <div class="row">
+            <input id="newPart" placeholder="예: 가슴, 등, 어깨, 팔, 하체, 코어"/>
+            <button id="btnAddPart">추가</button>
+          </div>
+          <div class="hr"></div>
+          <h3>부위 목록</h3>
+          <div id="partList" class="chips"></div>
+        </div>
+        <div>
+          <h3>기본값</h3>
+          <div class="muted">처음엔 무분할 + 기본세트 3으로 시작해도 충분함.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>운동 추가/수정</h2>
+      <div class="inline">
+        <div>
+          <label>운동명</label>
+          <input id="exName" placeholder="예: 벤치프레스"/>
+        </div>
+        <div>
+          <label>부위</label>
+          <select id="exPart"></select>
+        </div>
+        <div>
+          <label>추천 분할</label>
+          <select id="exSplit"></select>
+        </div>
+      </div>
+
+      <div class="inline" style="margin-top:10px">
+        <div>
+          <label>시작무게</label>
+          <input id="exStartW" type="number" step="0.5" placeholder="예: 50"/>
+        </div>
+        <div>
+          <label>최소 반복</label>
+          <input id="exMinR" type="number" step="1" placeholder="예: 6"/>
+        </div>
+        <div>
+          <label>최대 반복</label>
+          <input id="exMaxR" type="number" step="1" placeholder="예: 10"/>
+        </div>
+      </div>
+
+      <div class="inline" style="margin-top:10px">
+        <div>
+          <label>증량폭(kg)</label>
+          <input id="exInc" type="number" step="0.5" placeholder="예: 2.5"/>
+        </div>
+        <div>
+          <label>기본 세트</label>
+          <input id="exSets" type="number" step="1" placeholder="예: 3"/>
+        </div>
+        <div>
+          <label>메모(선택)</label>
+          <input id="exNote" placeholder="예: 머신/바벨 등"/>
+        </div>
+      </div>
+
+      <div class="btnrow" style="margin-top:10px">
+        <button class="primary" id="btnSaveExercise">저장</button>
+        <button id="btnResetExercise">입력 초기화</button>
+      </div>
+
+      <div class="hr"></div>
+      <h3>운동 목록</h3>
+      <div style="overflow:auto">
+        <table id="exerciseTable">
+          <thead>
+            <tr>
+              <th>운동</th><th>부위</th><th>분할</th>
+              <th class="right">시작</th><th class="right">min</th><th class="right">max</th>
+              <th class="right">증량</th><th class="right">세트</th><th>메모</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="muted" style="margin-top:8px">* 운동명은 고유 키로 사용됨(이름 바꾸면 새 운동으로 취급).</div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="tab-history" class="grid two" style="display:none">
+    <div class="card">
+      <h2>기록(History)</h2>
+      <div class="inline">
+        <div>
+          <label>필터: 운동</label>
+          <select id="histExercise"></select>
+        </div>
+        <div>
+          <label>기간(시작)</label>
+          <input id="histFrom" type="date"/>
+        </div>
+        <div>
+          <label>기간(끝)</label>
+          <input id="histTo" type="date"/>
+        </div>
+      </div>
+      <div class="btnrow" style="margin-top:10px">
+        <button class="primary" id="btnApplyHist">적용</button>
+        <button class="danger" id="btnClearHist">필터 초기화</button>
+      </div>
+
+      <div class="hr"></div>
+
+      <div style="overflow:auto">
+        <table id="logTable">
+          <thead>
+            <tr>
+              <th>날짜</th><th>분할</th><th>부위</th><th>운동</th>
+              <th class="right">세트</th><th class="right">무게</th><th class="right">반복</th>
+              <th>결과</th><th class="right">볼륨</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="btnrow" style="margin-top:10px">
+        <button class="danger" id="btnDeleteSelected">선택 삭제</button>
+      </div>
+      <div class="muted">* 행 선택은 체크박스로 표시됩니다.</div>
+    </div>
+
+    <div class="card">
+      <h2>현재 목표(Plan)</h2>
+      <div class="muted">각 운동의 “다음 목표”는 성공/실패 기록에 따라 자동 갱신됩니다.</div>
+      <div class="hr"></div>
+      <div style="overflow:auto">
+        <table id="planTable">
+          <thead>
+            <tr>
+              <th>운동</th><th>부위</th><th>분할</th>
+              <th class="right">다음 무게</th><th class="right">다음 반복</th>
+              <th class="right">세트</th>
+              <th class="right">min/max</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHARTS -->
+  <section id="tab-charts" class="grid two" style="display:none">
+    <div class="card">
+      <h2>차트</h2>
+      <div class="inline">
+        <div>
+          <label>운동 선택</label>
+          <select id="chartExercise"></select>
+        </div>
+        <div>
+          <label>지표</label>
+          <select id="chartMetric">
+            <option value="weight">무게</option>
+            <option value="reps">반복</option>
+            <option value="volume">볼륨(무게×반복×세트)</option>
+          </select>
+        </div>
+        <div>
+          <label>표시 개수</label>
+          <select id="chartN">
+            <option value="30">최근 30</option>
+            <option value="60">최근 60</option>
+            <option value="120">최근 120</option>
+            <option value="9999">전체</option>
+          </select>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <canvas id="chart"></canvas>
+      <div class="muted" id="chartHint" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>전체 볼륨(일자별)</h2>
+      <canvas id="chartTotal"></canvas>
+      <div class="muted" style="margin-top:8px">* 하루 총 볼륨 = 모든 운동(무게×반복×세트)의 합</div>
+    </div>
+  </section>
+
+  <!-- BACKUP -->
+  <section id="tab-backup" class="grid two" style="display:none">
+    <div class="card">
+      <h2>백업</h2>
+      <div class="btnrow">
+        <button class="primary" id="btnExport">JSON 내보내기</button>
+        <button id="btnCopyExport">클립보드 복사</button>
+        <button class="danger" id="btnResetAll">전체 초기화(주의)</button>
+      </div>
+      <div class="hr"></div>
+      <label>내보내기/가져오기 JSON</label>
+      <textarea id="backupText" placeholder="여기에 JSON이 표시됩니다. 가져오기는 JSON을 붙여넣고 '가져오기'를 누르세요."></textarea>
+      <div class="btnrow" style="margin-top:10px">
+        <button class="primary" id="btnImport">가져오기</button>
+      </div>
+      <div class="muted" style="margin-top:8px">
+        * GitHub Pages는 서버가 없어서 데이터는 브라우저(로컬스토리지)에 저장됩니다.<br/>
+        * 휴대폰/PC 동기화하려면 추후 Supabase 같은 백엔드 붙이면 됨.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>초기값</h2>
+      <div class="muted">
+        첫 세팅이 귀찮으면 아래 버튼으로 “기본 무분할 세트”를 자동 생성할 수 있어.
+      </div>
+      <div class="btnrow" style="margin-top:10px">
+        <button class="primary" id="btnSeed">기본 운동 세트 넣기</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+/** ---------- Data Model ----------
+state = {
+  splits: string[],
+  parts: string[],
+  exercises: {
+    [name]: { part, split, startW, minR, maxR, inc, sets, note }
+  },
+  plan: { [name]: { nextW, nextR } },  // computed/maintained
+  log: Array<{id,date,split,part,exercise,sets,weight,reps,result,volume,actualW?,actualR?}>
+}
+*/
+const KEY = "training_log_v1";
+const uid = () => Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+const todayISO = () => new Date().toISOString().slice(0,10);
+
+function loadState(){
+  const raw = localStorage.getItem(KEY);
+  if(raw){
+    try{ return JSON.parse(raw); }catch(e){}
+  }
+  // default minimal
+  return {
+    splits:["무분할"],
+    parts:["가슴","등","어깨","팔","하체","코어"],
+    exercises:{},
+    plan:{},
+    log:[]
+  };
+}
+function saveState(){
+  localStorage.setItem(KEY, JSON.stringify(state));
+  pill("저장됨");
+}
+function pill(text){
+  const el = document.getElementById("pillStatus");
+  el.textContent = text;
+  clearTimeout(pill._t);
+  pill._t=setTimeout(()=>el.textContent="로컬 저장",800);
+}
+
+let state = loadState();
+
+/** ---------- Progression Rules ----------
+- On success:
+  - if nextR < maxR => nextR++
+  - else (reach max) => nextW += inc; nextR = minR
+- On fail: keep nextW/nextR
+- Plan initializes from exercise.startW/minR
+*/
+function ensurePlan(name){
+  if(!state.plan[name]){
+    const ex = state.exercises[name];
+    if(!ex) return;
+    state.plan[name] = { nextW: num(ex.startW), nextR: int(ex.minR) };
+  }
+}
+function applyResult(name, result){
+  const ex = state.exercises[name]; if(!ex) return;
+  ensurePlan(name);
+  const p = state.plan[name];
+  if(result !== "성공") return; // 실패면 유지
+  const maxR = int(ex.maxR), minR=int(ex.minR), inc=num(ex.inc);
+  if(int(p.nextR) >= maxR){
+    p.nextW = round1(num(p.nextW) + inc);
+    p.nextR = minR;
+  }else{
+    p.nextR = int(p.nextR) + 1;
+  }
+}
+function num(v){ const n = Number(v); return Number.isFinite(n)?n:0; }
+function int(v){ const n = parseInt(v,10); return Number.isFinite(n)?n:0; }
+function round1(v){ return Math.round(v*10)/10; }
+
+/** ---------- UI Helpers ---------- */
+function $(id){ return document.getElementById(id); }
+function setOptions(sel, arr, withEmpty=false){
+  sel.innerHTML = "";
+  if(withEmpty){
+    const o=document.createElement("option"); o.value=""; o.textContent="(전체)";
+    sel.appendChild(o);
+  }
+  arr.forEach(v=>{
+    const o=document.createElement("option"); o.value=v; o.textContent=v;
+    sel.appendChild(o);
+  });
+}
+function el(tag, attrs={}, children=[]){
+  const x=document.createElement(tag);
+  Object.entries(attrs).forEach(([k,v])=>{
+    if(k==="class") x.className=v;
+    else if(k==="html") x.innerHTML=v;
+    else if(k.startsWith("on") && typeof v==="function") x.addEventListener(k.slice(2), v);
+    else x.setAttribute(k,v);
+  });
+  children.forEach(c=>x.appendChild(c));
+  return x;
+}
+function toast(msg){
+  pill(msg);
+}
+
+/** ---------- Tabs ---------- */
+document.querySelectorAll(".tab").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    btn.classList.add("active");
+    const t=btn.dataset.tab;
+    ["today","setup","history","charts","backup"].forEach(k=>{
+      $("tab-"+k).style.display = (k===t) ? "" : "none";
+    });
+    renderAll();
+  });
+});
+
+/** ---------- Setup: splits/parts ---------- */
+$("btnAddSplit").addEventListener("click", ()=>{
+  const v=$("newSplit").value.trim(); if(!v) return;
+  if(!state.splits.includes(v)) state.splits.push(v);
+  $("newSplit").value="";
+  saveState(); renderAll();
+});
+$("btnAddPart").addEventListener("click", ()=>{
+  const v=$("newPart").value.trim(); if(!v) return;
+  if(!state.parts.includes(v)) state.parts.push(v);
+  $("newPart").value="";
+  saveState(); renderAll();
+});
+
+function renderChips(container, arr, onDelete){
+  container.innerHTML="";
+  arr.forEach(v=>{
+    const c=el("span",{class:"chip"},[
+      document.createTextNode(v+" "),
+      el("button",{class:"ghost",style:"padding:0 6px;border:none;color:var(--muted);cursor:pointer", onclick:()=>onDelete(v)},[
+        document.createTextNode("✕")
+      ])
+    ]);
+    container.appendChild(c);
+  });
+}
+
+/** ---------- Exercises CRUD ---------- */
+function resetExerciseForm(){
+  $("exName").value="";
+  $("exStartW").value="";
+  $("exMinR").value="";
+  $("exMaxR").value="";
+  $("exInc").value="";
+  $("exSets").value="";
+  $("exNote").value="";
+}
+$("btnResetExercise").addEventListener("click", resetExerciseForm);
+
+$("btnSaveExercise").addEventListener("click", ()=>{
+  const name=$("exName").value.trim();
+  if(!name) return alert("운동명을 입력해");
+  const ex = {
+    part: $("exPart").value,
+    split: $("exSplit").value,
+    startW: num($("exStartW").value || 0),
+    minR: int($("exMinR").value || 6),
+    maxR: int($("exMaxR").value || 10),
+    inc: num($("exInc").value || 2.5),
+    sets: int($("exSets").value || 3),
+    note: $("exNote").value.trim()
+  };
+  state.exercises[name]=ex;
+  // ensure plan exists
+  if(!state.plan[name]) state.plan[name]={ nextW: ex.startW, nextR: ex.minR };
+  saveState(); renderAll(); toast("운동 저장");
+});
+
+function renderExerciseTable(){
+  const tbody = $("exerciseTable").querySelector("tbody");
+  tbody.innerHTML="";
+  const names = Object.keys(state.exercises).sort((a,b)=>a.localeCompare(b,"ko"));
+  names.forEach(name=>{
+    const ex=state.exercises[name];
+    const tr=document.createElement("tr");
+    tr.appendChild(el("td",{html:name}));
+    tr.appendChild(el("td",{html:ex.part||""}));
+    tr.appendChild(el("td",{html:ex.split||""}));
+    tr.appendChild(el("td",{class:"right",html:ex.startW}));
+    tr.appendChild(el("td",{class:"right",html:ex.minR}));
+    tr.appendChild(el("td",{class:"right",html:ex.maxR}));
+    tr.appendChild(el("td",{class:"right",html:ex.inc}));
+    tr.appendChild(el("td",{class:"right",html:ex.sets}));
+    tr.appendChild(el("td",{html:ex.note||""}));
+    const td=el("td",{class:"right"});
+    const del=el("button",{class:"danger",onclick:()=>{
+      if(!confirm(`삭제? ${name}`)) return;
+      delete state.exercises[name];
+      delete state.plan[name];
+      // also remove logs of this exercise
+      state.log = state.log.filter(x=>x.exercise!==name);
+      saveState(); renderAll();
+    }},[document.createTextNode("삭제")]);
+    const edit=el("button",{style:"margin-right:6px",onclick:()=>{
+      $("exName").value=name;
+      $("exPart").value=ex.part||state.parts[0]||"";
+      $("exSplit").value=ex.split||state.splits[0]||"";
+      $("exStartW").value=ex.startW;
+      $("exMinR").value=ex.minR;
+      $("exMaxR").value=ex.maxR;
+      $("exInc").value=ex.inc;
+      $("exSets").value=ex.sets;
+      $("exNote").value=ex.note||"";
+      toast("수정 후 저장");
+    }},[document.createTextNode("수정")]);
+    td.appendChild(edit); td.appendChild(del);
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  });
+}
+
+/** ---------- Today ---------- */
+$("todayDate").value = todayISO();
+$("todayDate").addEventListener("change", ()=> renderTodayChips());
+$("todaySplit").addEventListener("change", ()=> renderTodayChips());
+
+$("toggleActual").addEventListener("change", ()=>{
+  const show = $("toggleActual").checked;
+  document.querySelectorAll(".actualCol").forEach(x=>x.style.display = show ? "" : "none");
+  renderTodayTable();
+});
+
+let todayRows = []; // {name, part, sets, targetW, targetR, result, actualW?, actualR?}
+
+function buildToday(){
+  const split = $("todaySplit").value;
+  const names = Object.keys(state.exercises);
+  if(names.length===0){
+    alert("Setup에서 운동을 먼저 추가해.");
+    return;
+  }
+  todayRows = names
+    .map(n=>({name:n, ...state.exercises[n]}))
+    .filter(x=> !split || (x.split===split))
+    .sort((a,b)=>a.part.localeCompare(b.part,"ko") || a.name.localeCompare(b.name,"ko"))
+    .map(x=>{
+      ensurePlan(x.name);
+      const p = state.plan[x.name];
+      return {
+        name:x.name,
+        part:x.part,
+        sets:int(x.sets||3),
+        targetW: num(p.nextW),
+        targetR: int(p.nextR),
+        result:"",
+        actualW:"",
+        actualR:""
+      };
+    });
+
+  renderTodayTable();
+  renderTodayKPIs();
+  renderTodaySummary();
+  toast("오늘 루틴 생성");
+}
+
+$("btnBuildToday").addEventListener("click", buildToday);
+
+$("btnClearToday").addEventListener("click", ()=>{
+  todayRows = [];
+  renderTodayTable(); renderTodayKPIs(); renderTodaySummary();
+});
+
+$("btnMarkAllSuccess").addEventListener("click", ()=>{
+  todayRows.forEach(r=>r.result="성공");
+  renderTodayTable(); renderTodayKPIs();
+});
+$("btnMarkAllFail").addEventListener("click", ()=>{
+  todayRows.forEach(r=>r.result="실패");
+  renderTodayTable(); renderTodayKPIs();
+});
+
+function renderTodayChips(){
+  $("todayDateChip").textContent = "📅 " + ($("todayDate").value || todayISO());
+  $("todaySplitChip").textContent = "🧩 " + ($("todaySplit").value || "-");
+}
+
+function renderTodayTable(){
+  const tbody = $("todayTable").querySelector("tbody");
+  tbody.innerHTML="";
+  const showActual = $("toggleActual").checked;
+
+  todayRows.forEach((r, idx)=>{
+    const tr=document.createElement("tr");
+    tr.appendChild(el("td",{html:r.name}));
+    tr.appendChild(el("td",{html:r.part}));
+    tr.appendChild(el("td",{class:"right",html:r.sets}));
+
+    tr.appendChild(el("td",{class:"right",html:r.targetW}));
+    tr.appendChild(el("td",{class:"right",html:r.targetR}));
+
+    const sel=el("select",{});
+    ["","성공","실패"].forEach(v=>{
+      const o=document.createElement("option"); o.value=v; o.textContent = v||"(선택)";
+      sel.appendChild(o);
+    });
+    sel.value=r.result||"";
+    sel.addEventListener("change", ()=>{ r.result=sel.value; renderTodayKPIs(); });
+    tr.appendChild(el("td",{},[sel]));
+
+    if(showActual){
+      const iw=el("input",{type:"number",step:"0.5",value:r.actualW||"",style:"text-align:right"});
+      iw.addEventListener("input", ()=>{ r.actualW=iw.value; });
+      const ir=el("input",{type:"number",step:"1",value:r.actualR||"",style:"text-align:right"});
+      ir.addEventListener("input", ()=>{ r.actualR=ir.value; });
+      tr.appendChild(el("td",{class:"right"},[iw]));
+      tr.appendChild(el("td",{class:"right"},[ir]));
+    }else{
+      tr.appendChild(el("td",{class:"right actualCol",style:"display:none"}));
+      tr.appendChild(el("td",{class:"right actualCol",style:"display:none"}));
+    }
+
+    tbody.appendChild(tr);
+  });
+}
+
+function renderTodayKPIs(){
+  const exN = todayRows.length;
+  const sets = todayRows.reduce((a,b)=>a+int(b.sets),0);
+  const volume = todayRows.reduce((a,b)=>a + int(b.sets)*num(b.targetW)*int(b.targetR),0);
+  const succ = todayRows.filter(x=>x.result==="성공").length;
+  $("kpiExercises").textContent = exN;
+  $("kpiSets").textContent = sets;
+  $("kpiVolume").textContent = Math.round(volume);
+  $("kpiSuccess").textContent = succ;
+  $("kpiSuccess").className = "big " + (succ===exN && exN>0 ? "good" : "");
+}
+function renderTodaySummary(){
+  if(todayRows.length===0){ $("todaySummary").textContent="오늘 루틴을 생성하세요."; return; }
+  const byPart = {};
+  todayRows.forEach(r=>{
+    byPart[r.part] = byPart[r.part] || [];
+    byPart[r.part].push(r);
+  });
+  const parts = Object.keys(byPart);
+  let out="";
+  parts.forEach(p=>{
+    const list=byPart[p];
+    out += `• ${p}: ${list.length}종목\n`;
+  });
+  $("todaySummary").textContent = out.trim();
+}
+
+/** Save Today -> Log (and update Plan) */
+$("btnSaveToday").addEventListener("click", ()=>{
+  if(todayRows.length===0) return alert("오늘 루틴을 먼저 생성해.");
+  const date = $("todayDate").value || todayISO();
+  const split = $("todaySplit").value || "무분할";
+  const showActual = $("toggleActual").checked;
+
+  // Save only rows with result selected
+  const selected = todayRows.filter(r=>r.result==="성공" || r.result==="실패");
+  if(selected.length===0) return alert("결과를 선택한 운동이 없습니다.");
+
+  selected.forEach(r=>{
+    // determine performed values: either actual(when provided) else target
+    const w = (showActual && r.actualW!=="") ? num(r.actualW) : num(r.targetW);
+    const reps = (showActual && r.actualR!=="") ? int(r.actualR) : int(r.targetR);
+
+    const sets = int(r.sets);
+    const vol = sets * w * reps;
+
+    state.log.push({
+      id: uid(),
+      date, split,
+      part: r.part,
+      exercise: r.name,
+      sets,
+      weight: w,
+      reps,
+      result: r.result,
+      volume: vol
+    });
+
+    // update progression based on result
+    applyResult(r.name, r.result);
+  });
+
+  saveState();
+  toast("저장 완료");
+  renderAll();
+});
+
+/** ---------- History ---------- */
+function renderLogTable(){
+  const tbody = $("logTable").querySelector("tbody");
+  tbody.innerHTML="";
+
+  const ex = $("histExercise").value;
+  const from = $("histFrom").value;
+  const to = $("histTo").value;
+
+  let rows = [...state.log];
+  if(ex) rows = rows.filter(r=>r.exercise===ex);
+  if(from) rows = rows.filter(r=>r.date>=from);
+  if(to) rows = rows.filter(r=>r.date<=to);
+  rows.sort((a,b)=> b.date.localeCompare(a.date));
+
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    const cb=el("input",{type:"checkbox","data-id":r.id});
+    tr.appendChild(el("td",{},[cb, document.createTextNode(" "+r.date)]));
+    tr.appendChild(el("td",{html:r.split}));
+    tr.appendChild(el("td",{html:r.part}));
+    tr.appendChild(el("td",{html:r.exercise}));
+    tr.appendChild(el("td",{class:"right",html:r.sets}));
+    tr.appendChild(el("td",{class:"right",html:r.weight}));
+    tr.appendChild(el("td",{class:"right",html:r.reps}));
+    tr.appendChild(el("td",{html: r.result==="성공" ? `<span class="good">성공</span>` : `<span class="bad">실패</span>`}));
+    tr.appendChild(el("td",{class:"right",html:Math.round(r.volume)}));
+    tbody.appendChild(tr);
+  });
+}
+
+$("btnApplyHist").addEventListener("click", renderLogTable);
+$("btnClearHist").addEventListener("click", ()=>{
+  $("histExercise").value="";
+  $("histFrom").value="";
+  $("histTo").value="";
+  renderLogTable();
+});
+
+$("btnDeleteSelected").addEventListener("click", ()=>{
+  const ids = [...$("logTable").querySelectorAll('input[type="checkbox"][data-id]:checked')]
+    .map(x=>x.dataset.id);
+  if(ids.length===0) return alert("삭제할 행을 선택해.");
+  if(!confirm(`${ids.length}개 기록 삭제?`)) return;
+  state.log = state.log.filter(r=>!ids.includes(r.id));
+  saveState(); renderAll();
+});
+
+/** ---------- Plan Table ---------- */
+function renderPlanTable(){
+  const tbody = $("planTable").querySelector("tbody");
+  tbody.innerHTML="";
+  const names = Object.keys(state.exercises).sort((a,b)=>a.localeCompare(b,"ko"));
+  names.forEach(name=>{
+    const ex=state.exercises[name];
+    ensurePlan(name);
+    const p=state.plan[name];
+    const tr=document.createElement("tr");
+    tr.appendChild(el("td",{html:name}));
+    tr.appendChild(el("td",{html:ex.part}));
+    tr.appendChild(el("td",{html:ex.split}));
+    tr.appendChild(el("td",{class:"right",html:p.nextW}));
+    tr.appendChild(el("td",{class:"right",html:p.nextR}));
+    tr.appendChild(el("td",{class:"right",html:ex.sets}));
+    tr.appendChild(el("td",{class:"right",html:`${ex.minR}/${ex.maxR}`}));
+    tbody.appendChild(tr);
+  });
+}
+
+/** ---------- Charts (vanilla canvas) ---------- */
+function drawLineChart(canvas, labels, values, title){
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width = canvas.clientWidth * devicePixelRatio;
+  const H = canvas.height = canvas.clientHeight * devicePixelRatio;
+  ctx.clearRect(0,0,W,H);
+
+  const pad = 48*devicePixelRatio;
+  const innerW = W - pad*2;
+  const innerH = H - pad*2;
+
+  // title
+  ctx.fillStyle = "rgba(230,237,243,.9)";
+  ctx.font = `${14*devicePixelRatio}px system-ui`;
+  ctx.fillText(title, pad, pad*0.65);
+
+  if(values.length===0){
+    ctx.fillStyle="rgba(154,164,178,.8)";
+    ctx.font = `${12*devicePixelRatio}px system-ui`;
+    ctx.fillText("데이터가 없습니다.", pad, pad+20*devicePixelRatio);
+    return;
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = (max-min) || 1;
+
+  // axes
+  ctx.strokeStyle="rgba(255,255,255,.10)";
+  ctx.lineWidth=1*devicePixelRatio;
+  ctx.beginPath();
+  ctx.moveTo(pad, H-pad);
+  ctx.lineTo(W-pad, H-pad);
+  ctx.lineTo(W-pad, pad);
+  ctx.stroke();
+
+  // grid + y labels
+  ctx.fillStyle="rgba(154,164,178,.8)";
+  ctx.font = `${11*devicePixelRatio}px system-ui`;
+  for(let i=0;i<=4;i++){
+    const y = pad + (innerH*(i/4));
+    ctx.strokeStyle="rgba(255,255,255,.06)";
+    ctx.beginPath(); ctx.moveTo(pad,y); ctx.lineTo(W-pad,y); ctx.stroke();
+    const val = (max - range*(i/4));
+    ctx.fillText(val.toFixed(0), 10*devicePixelRatio, y+4*devicePixelRatio);
+  }
+
+  // line
+  ctx.strokeStyle="rgba(122,162,247,.9)";
+  ctx.lineWidth=2*devicePixelRatio;
+  ctx.beginPath();
+  values.forEach((v,i)=>{
+    const x = pad + innerW*(i/(values.length-1 || 1));
+    const y = pad + innerH*(1-((v-min)/range));
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  // dots
+  ctx.fillStyle="rgba(122,162,247,.9)";
+  values.forEach((v,i)=>{
+    const x = pad + innerW*(i/(values.length-1 || 1));
+    const y = pad + innerH*(1-((v-min)/range));
+    ctx.beginPath(); ctx.arc(x,y,3*devicePixelRatio,0,Math.PI*2); ctx.fill();
+  });
+
+  // x labels (sparse)
+  ctx.fillStyle="rgba(154,164,178,.75)";
+  const step = Math.ceil(values.length/6);
+  for(let i=0;i<labels.length;i+=step){
+    const x = pad + innerW*(i/(labels.length-1 || 1));
+    ctx.save();
+    ctx.translate(x, H-pad+14*devicePixelRatio);
+    ctx.rotate(-0.4);
+    ctx.fillText(labels[i].slice(5), 0, 0);
+    ctx.restore();
+  }
+}
+
+function renderCharts(){
+  const ex = $("chartExercise").value;
+  const metric = $("chartMetric").value;
+  const N = int($("chartN").value);
+
+  let rows = [...state.log];
+  if(ex) rows = rows.filter(r=>r.exercise===ex);
+  rows.sort((a,b)=> a.date.localeCompare(b.date));
+
+  // aggregate by date for selected exercise
+  const byDate = new Map();
+  rows.forEach(r=>{
+    const k=r.date;
+    const cur = byDate.get(k) || {vol:0,w:0,reps:0,count:0};
+    cur.vol += r.volume;
+    cur.w += r.weight;
+    cur.reps += r.reps;
+    cur.count += 1;
+    byDate.set(k,cur);
+  });
+
+  let labels = [...byDate.keys()].sort();
+  if(N !== 9999) labels = labels.slice(Math.max(0, labels.length-N));
+  const vals = labels.map(d=>{
+    const x=byDate.get(d);
+    if(metric==="volume") return x.vol;
+    if(metric==="weight") return x.w / (x.count||1);
+    return x.reps / (x.count||1);
+  });
+
+  const title = ex ? `${ex} - ${metric==="weight"?"무게":metric==="reps"?"반복":"볼륨"}` : "운동을 선택하세요";
+  drawLineChart($("chart"), labels, vals, title);
+  $("chartHint").textContent = ex ? "무게/반복은 기록된 값의 평균(일자 기준), 볼륨은 합계" : "";
+
+  // total volume per day
+  const totalMap = new Map();
+  state.log.forEach(r=>{
+    totalMap.set(r.date, (totalMap.get(r.date)||0) + r.volume);
+  });
+  const tlabels = [...totalMap.keys()].sort();
+  const tvals = tlabels.map(d=>totalMap.get(d));
+  drawLineChart($("chartTotal"), tlabels.slice(Math.max(0,tlabels.length-90)), tvals.slice(Math.max(0,tvals.length-90)), "최근 90일 총볼륨");
+}
+
+/** ---------- Backup ---------- */
+$("btnExport").addEventListener("click", ()=>{
+  $("backupText").value = JSON.stringify(state, null, 2);
+});
+$("btnCopyExport").addEventListener("click", async ()=>{
+  const txt = $("backupText").value || JSON.stringify(state);
+  await navigator.clipboard.writeText(txt);
+  toast("복사됨");
+});
+$("btnImport").addEventListener("click", ()=>{
+  try{
+    const obj = JSON.parse($("backupText").value);
+    state = obj;
+    saveState(); renderAll(); toast("가져오기 완료");
+  }catch(e){
+    alert("JSON 파싱 실패");
+  }
+});
+$("btnResetAll").addEventListener("click", ()=>{
+  if(!confirm("전체 초기화? 모든 데이터가 삭제됩니다.")) return;
+  localStorage.removeItem(KEY);
+  state = loadState();
+  saveState(); renderAll();
+});
+$("btnSeed").addEventListener("click", ()=>{
+  // seed: minimal full-body list
+  if(Object.keys(state.exercises).length>0 && !confirm("이미 운동이 있습니다. 덮어쓰지 않고 추가할까요?")) return;
+  if(!state.splits.includes("무분할")) state.splits.push("무분할");
+  const add = (name,part,startW,minR,maxR,inc,sets,split="무분할")=>{
+    state.exercises[name]={part,split,startW,minR,maxR,inc,sets,note:""};
+    state.plan[name]={nextW:startW,nextR:minR};
+  };
+  add("벤치프레스","가슴",50,6,10,2.5,3);
+  add("랫풀다운","등",45,8,12,5,3);
+  add("오버헤드프레스","어깨",30,5,8,2.5,3);
+  add("사레레","어깨",8,12,20,1,2);
+  add("바벨컬","팔",20,8,12,2.5,2);
+  add("푸시다운","팔",25,8,12,2.5,2);
+  add("레그프레스","하체",100,6,10,5,3);
+  add("RDL","하체",60,6,10,5,2);
+  add("레그레이즈","코어",0,10,15,0,2);
+  saveState(); renderAll(); toast("기본 세트 추가");
+});
+
+/** ---------- Init Selects ---------- */
+function refreshSelects(){
+  setOptions($("todaySplit"), state.splits);
+  setOptions($("exPart"), state.parts);
+  setOptions($("exSplit"), state.splits);
+  const exNames = Object.keys(state.exercises).sort((a,b)=>a.localeCompare(b,"ko"));
+  setOptions($("histExercise"), exNames, true);
+  setOptions($("chartExercise"), exNames, true);
+}
+
+/** ---------- Render All ---------- */
+function renderAll(){
+  refreshSelects();
+  renderTodayChips();
+  renderTodayTable();
+  renderTodayKPIs();
+  renderTodaySummary();
+  renderExerciseTable();
+  renderChips($("splitList"), state.splits, (v)=>{
+    if(v==="무분할" && state.splits.length===1) return alert("마지막 분할은 삭제 불가");
+    if(!confirm(`분할 삭제? ${v}`)) return;
+    state.splits = state.splits.filter(x=>x!==v);
+    // also adjust exercises with that split
+    Object.values(state.exercises).forEach(ex=>{ if(ex.split===v) ex.split=state.splits[0]||"무분할"; });
+    saveState(); renderAll();
+  });
+  renderChips($("partList"), state.parts, (v)=>{
+    if(!confirm(`부위 삭제? ${v}`)) return;
+    state.parts = state.parts.filter(x=>x!==v);
+    Object.values(state.exercises).forEach(ex=>{ if(ex.part===v) ex.part=state.parts[0]||"기타"; });
+    saveState(); renderAll();
+  });
+  renderLogTable();
+  renderPlanTable();
+  renderCharts();
+}
+
+renderAll();
+
+// default split chip
+$("todaySplit").value = state.splits[0] || "무분할";
+renderTodayChips();
+</script>
+</body>
+</html>
