@@ -142,7 +142,7 @@
         <button class="primary" id="btnSaveToday">오늘 기록 저장</button>
       </div>
       <div class="muted" style="margin-top:8px">
-        * 기본은 로컬 저장 + (선택) 구글시트 백업. 결과는 각 운동 1개만 선택하면 저장됩니다.
+        * 기본은 로컬 저장 + 구글시트 백업. 결과는 각 운동 1개만 선택하면 저장됩니다.
       </div>
     </div>
 
@@ -387,6 +387,7 @@
         <button id="btnCopyExport">클립보드 복사</button>
         <button id="btnSaveMetaToSheet">설정/플랜 → 시트 저장</button>
         <button id="btnRestoreMetaFromSheet">시트 → 설정/플랜 복구</button>
+        <button id="btnRestoreAllFromSheet">시트 → 전체 복구(Setup+Log)</button>
         <button class="danger" id="btnResetAll">전체 초기화(주의)</button>
       </div>
       <div class="hr"></div>
@@ -397,7 +398,7 @@
       </div>
       <div class="muted" style="margin-top:8px">
         * GitHub Pages는 서버가 없어서 기본은 로컬 저장입니다.<br/>
-        * 이 버전은 “저장 시 로그를 구글시트(Log)에 자동 백업”합니다.
+        * 이 버전은 “저장 시 로그 + 설정/플랜을 구글시트에 자동 백업”합니다.
       </div>
     </div>
 
@@ -419,10 +420,9 @@
  * ========================= */
 const SHEET_SYNC = {
   enabled: true,
+  // ✅ 여기만 너 웹앱 URL로 바꿔라
   endpoint: "https://script.google.com/macros/s/AKfycbwsEWNKnGUiCKysRHw92BfdmNfO0emH7GEWtnqHTkt_807UkheaumJEhnlOPWN2XxP4Jg/exec",
- token: "HH_TRAINLOG_2026_01_01__p9r3k1v7x2n8q4m6z0a5s9d1f3g7h"
-
-
+  token: "HH_TRAINLOG_2026_01_01__p9r3k1v7x2n8q4m6z0a5s9d1f3g7h"
 };
 
 function sheetJsonp(action, payload) {
@@ -471,7 +471,6 @@ function pill(text){
   clearTimeout(pill._t);
   pill._t=setTimeout(()=>el.textContent="로컬 저장",800);
 }
-
 let state = loadState();
 
 /** ---------- Progression Rules ---------- */
@@ -766,7 +765,7 @@ function renderTodaySummary(){
   $("todaySummary").textContent = out.trim();
 }
 
-/** Save Today -> Log (and update Plan) + Sheet backup */
+/** Save Today -> Log + Plan update + Sheet backup(Log + Meta) */
 $("btnSaveToday").addEventListener("click", async ()=>{
   if(todayRows.length===0) return alert("오늘 루틴을 먼저 생성해.");
   const date = $("todayDate").value || todayISO();
@@ -810,17 +809,19 @@ $("btnSaveToday").addEventListener("click", async ()=>{
 
   saveState();
 
-  // ✅ 구글시트(Log)로 백업 (실패해도 로컬은 살아있음)
-  if (SHEET_SYNC.enabled && SHEET_SYNC.token && SHEET_SYNC.token !== "CHANGE_ME_TO_YOUR_TOKEN_40CHARS_PLUS") {
-    try {
-      const res = await sheetJsonp("appendLog", { rows: rowsForSheet });
-      if (!res.ok) throw new Error(res.error || "sheet_fail");
-      toast("저장 완료 + 시트 백업 OK");
-    } catch (e) {
-      toast("로컬 저장 OK / 시트 백업 실패");
-    }
-  } else {
-    toast("저장 완료(로컬) / 시트백업 토큰 미설정");
+  try {
+    // ✅ 1) Log 백업
+    const res = await sheetJsonp("appendLog", { rows: rowsForSheet });
+    if (!res.ok) throw new Error(res.error || "sheet_fail");
+
+    // ✅ 2) Meta(Setup/Plan)도 자동 백업
+    const meta = { splits: state.splits, parts: state.parts, exercises: state.exercises, plan: state.plan };
+    const res2 = await sheetJsonp("saveMeta", { meta });
+    if (!res2.ok) throw new Error(res2.error || "meta_fail");
+
+    toast("저장 완료 + 시트 백업 OK");
+  } catch (e) {
+    toast("로컬 저장 OK / 시트 백업 실패");
   }
 
   renderAll();
@@ -895,7 +896,7 @@ function renderPlanTable(){
   });
 }
 
-/** ---------- Charts (vanilla canvas) ---------- */
+/** ---------- Charts (canvas) ---------- */
 function drawLineChart(canvas, labels, values, title){
   const ctx = canvas.getContext("2d");
   const W = canvas.width = canvas.clientWidth * devicePixelRatio;
@@ -1036,7 +1037,6 @@ $("btnResetAll").addEventListener("click", ()=>{
 });
 
 $("btnSaveMetaToSheet").addEventListener("click", async ()=>{
-  if (!SHEET_SYNC.enabled) return alert("시트 백업이 꺼져있음");
   try{
     const meta = { splits: state.splits, parts: state.parts, exercises: state.exercises, plan: state.plan };
     const res = await sheetJsonp("saveMeta", { meta });
@@ -1048,7 +1048,6 @@ $("btnSaveMetaToSheet").addEventListener("click", async ()=>{
 });
 
 $("btnRestoreMetaFromSheet").addEventListener("click", async ()=>{
-  if (!SHEET_SYNC.enabled) return alert("시트 백업이 꺼져있음");
   try{
     const res = await sheetJsonp("getMeta", {});
     if(!res.ok || !res.meta) return alert("시트에 저장된 Meta가 없음");
@@ -1059,6 +1058,55 @@ $("btnRestoreMetaFromSheet").addEventListener("click", async ()=>{
     saveState(); renderAll(); toast("시트에서 복구 OK");
   }catch(e){
     toast("시트 복구 실패");
+  }
+});
+
+// ✅ Setup/Plan + Log 전체 복구
+$("btnRestoreAllFromSheet").addEventListener("click", async ()=>{
+  if(!confirm("시트 데이터를 기준으로 로컬 데이터를 전부 덮어씁니다. 진행?")) return;
+
+  try{
+    // 1) Meta 복구
+    const m = await sheetJsonp("getMeta", {});
+    if(!m.ok || !m.meta) return alert("Meta(설정/플랜)가 시트에 없음. 먼저 '설정/플랜 → 시트 저장' 해줘.");
+    state.splits = m.meta.splits || state.splits;
+    state.parts = m.meta.parts || state.parts;
+    state.exercises = m.meta.exercises || state.exercises;
+    state.plan = m.meta.plan || state.plan;
+
+    // 2) Log 전체 읽기(페이지네이션)
+    const all = [];
+    let offset = 0;
+    const limit = 500;
+
+    while(true){
+      const res = await sheetJsonp("getLogPage", { offset, limit });
+      if(!res.ok) throw new Error(res.error || "getLogPage_fail");
+      (res.rows || []).forEach(r => all.push(r));
+      if(res.done) break;
+      offset = res.nextOffset || (offset + limit);
+      if(offset > 200000) break; // 안전장치
+    }
+
+    // 3) 로컬 log 덮어쓰기
+    state.log = all.map(r => ({
+      id: uid(),
+      date: r.date || "",
+      split: r.split || "",
+      part: r.part || "",
+      exercise: r.exercise || "",
+      sets: Number(r.sets || 0),
+      weight: Number(r.weight || 0),
+      reps: Number(r.reps || 0),
+      result: r.result || "",
+      volume: Number(r.volume || 0)
+    }));
+
+    saveState();
+    renderAll();
+    toast(`전체 복구 완료: 로그 ${state.log.length}개`);
+  }catch(e){
+    toast("전체 복구 실패(웹앱 재배포/권한/URL 확인)");
   }
 });
 
@@ -1114,11 +1162,10 @@ function renderAll(){
   renderPlanTable();
   renderCharts();
 
-  // hint
   $("sheetSyncHint").textContent =
-    (SHEET_SYNC.enabled && SHEET_SYNC.token && SHEET_SYNC.token !== "CHANGE_ME_TO_YOUR_TOKEN_40CHARS_PLUS")
-      ? "✅ 저장 시 Log 시트에 자동 백업"
-      : "⚠️ 시트 백업 토큰 미설정";
+    (SHEET_SYNC.enabled && SHEET_SYNC.endpoint && SHEET_SYNC.endpoint !== "PUT_YOUR_WEBAPP_URL_HERE")
+      ? "✅ 저장 시 Log+Meta 시트에 자동 백업"
+      : "⚠️ endpoint(웹앱 URL) 미설정";
 }
 
 renderAll();
