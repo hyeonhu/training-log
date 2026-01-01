@@ -107,6 +107,7 @@
             <input id="toggleActual" type="checkbox"/>
             <span class="muted">실제 무게/반복 입력(선택)</span>
           </div>
+          <div class="muted" style="margin-top:6px" id="sheetSyncHint"></div>
         </div>
       </div>
 
@@ -141,7 +142,7 @@
         <button class="primary" id="btnSaveToday">오늘 기록 저장</button>
       </div>
       <div class="muted" style="margin-top:8px">
-        * 결과는 각 운동 1개만 선택하면 저장됩니다. (세트 수만큼 자동 누적)
+        * 기본은 로컬 저장 + (선택) 구글시트 백업. 결과는 각 운동 1개만 선택하면 저장됩니다.
       </div>
     </div>
 
@@ -384,6 +385,8 @@
       <div class="btnrow">
         <button class="primary" id="btnExport">JSON 내보내기</button>
         <button id="btnCopyExport">클립보드 복사</button>
+        <button id="btnSaveMetaToSheet">설정/플랜 → 시트 저장</button>
+        <button id="btnRestoreMetaFromSheet">시트 → 설정/플랜 복구</button>
         <button class="danger" id="btnResetAll">전체 초기화(주의)</button>
       </div>
       <div class="hr"></div>
@@ -393,8 +396,8 @@
         <button class="primary" id="btnImport">가져오기</button>
       </div>
       <div class="muted" style="margin-top:8px">
-        * GitHub Pages는 서버가 없어서 데이터는 브라우저(로컬스토리지)에 저장됩니다.<br/>
-        * 휴대폰/PC 동기화하려면 추후 Supabase 같은 백엔드 붙이면 됨.
+        * GitHub Pages는 서버가 없어서 기본은 로컬 저장입니다.<br/>
+        * 이 버전은 “저장 시 로그를 구글시트(Log)에 자동 백업”합니다.
       </div>
     </div>
 
@@ -411,17 +414,40 @@
 </main>
 
 <script>
-/** ---------- Data Model ----------
-state = {
-  splits: string[],
-  parts: string[],
-  exercises: {
-    [name]: { part, split, startW, minR, maxR, inc, sets, note }
-  },
-  plan: { [name]: { nextW, nextR } },  // computed/maintained
-  log: Array<{id,date,split,part,exercise,sets,weight,reps,result,volume,actualW?,actualR?}>
+/** =========================
+ * Google Sheets Sync (JSONP)
+ * ========================= */
+const SHEET_SYNC = {
+  enabled: true,
+  endpoint: "https://script.google.com/macros/s/AKfycbyFOehOFFmy-QM2gGRDn_KrelFc3IYS7XLNH81Sbkk1KhZXJOnLfImuvXPhS-HuLtYrEA/exec",
+  token: "CHANGE_ME_TO_YOUR_TOKEN_40CHARS_PLUS"
+};
+
+function sheetJsonp(action, payload) {
+  if (!SHEET_SYNC.enabled) return Promise.resolve({ ok: false, error: "disabled" });
+
+  return new Promise((resolve, reject) => {
+    const cb = "cb_" + Math.random().toString(36).slice(2);
+    const url = new URL(SHEET_SYNC.endpoint);
+    url.searchParams.set("action", action);
+    url.searchParams.set("token", SHEET_SYNC.token);
+    url.searchParams.set("callback", cb);
+    url.searchParams.set("payload", JSON.stringify(payload));
+
+    const s = document.createElement("script");
+    window[cb] = (res) => { cleanup(); resolve(res); };
+    s.onerror = () => { cleanup(); reject(new Error("jsonp_failed")); };
+    s.src = url.toString();
+    document.body.appendChild(s);
+
+    function cleanup() {
+      try { delete window[cb]; } catch(e) { window[cb] = undefined; }
+      s.remove();
+    }
+  });
 }
-*/
+
+/** ---------- Data Model ---------- */
 const KEY = "training_log_v1";
 const uid = () => Math.random().toString(36).slice(2,10)+Date.now().toString(36);
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -431,14 +457,7 @@ function loadState(){
   if(raw){
     try{ return JSON.parse(raw); }catch(e){}
   }
-  // default minimal
-  return {
-    splits:["무분할"],
-    parts:["가슴","등","어깨","팔","하체","코어"],
-    exercises:{},
-    plan:{},
-    log:[]
-  };
+  return { splits:["무분할"], parts:["가슴","등","어깨","팔","하체","코어"], exercises:{}, plan:{}, log:[] };
 }
 function saveState(){
   localStorage.setItem(KEY, JSON.stringify(state));
@@ -453,13 +472,7 @@ function pill(text){
 
 let state = loadState();
 
-/** ---------- Progression Rules ----------
-- On success:
-  - if nextR < maxR => nextR++
-  - else (reach max) => nextW += inc; nextR = minR
-- On fail: keep nextW/nextR
-- Plan initializes from exercise.startW/minR
-*/
+/** ---------- Progression Rules ---------- */
 function ensurePlan(name){
   if(!state.plan[name]){
     const ex = state.exercises[name];
@@ -471,7 +484,7 @@ function applyResult(name, result){
   const ex = state.exercises[name]; if(!ex) return;
   ensurePlan(name);
   const p = state.plan[name];
-  if(result !== "성공") return; // 실패면 유지
+  if(result !== "성공") return;
   const maxR = int(ex.maxR), minR=int(ex.minR), inc=num(ex.inc);
   if(int(p.nextR) >= maxR){
     p.nextW = round1(num(p.nextW) + inc);
@@ -508,9 +521,7 @@ function el(tag, attrs={}, children=[]){
   children.forEach(c=>x.appendChild(c));
   return x;
 }
-function toast(msg){
-  pill(msg);
-}
+function toast(msg){ pill(msg); }
 
 /** ---------- Tabs ---------- */
 document.querySelectorAll(".tab").forEach(btn=>{
@@ -538,7 +549,6 @@ $("btnAddPart").addEventListener("click", ()=>{
   $("newPart").value="";
   saveState(); renderAll();
 });
-
 function renderChips(container, arr, onDelete){
   container.innerHTML="";
   arr.forEach(v=>{
@@ -578,7 +588,6 @@ $("btnSaveExercise").addEventListener("click", ()=>{
     note: $("exNote").value.trim()
   };
   state.exercises[name]=ex;
-  // ensure plan exists
   if(!state.plan[name]) state.plan[name]={ nextW: ex.startW, nextR: ex.minR };
   saveState(); renderAll(); toast("운동 저장");
 });
@@ -604,7 +613,6 @@ function renderExerciseTable(){
       if(!confirm(`삭제? ${name}`)) return;
       delete state.exercises[name];
       delete state.plan[name];
-      // also remove logs of this exercise
       state.log = state.log.filter(x=>x.exercise!==name);
       saveState(); renderAll();
     }},[document.createTextNode("삭제")]);
@@ -670,7 +678,6 @@ function buildToday(){
   renderTodaySummary();
   toast("오늘 루틴 생성");
 }
-
 $("btnBuildToday").addEventListener("click", buildToday);
 
 $("btnClearToday").addEventListener("click", ()=>{
@@ -697,12 +704,11 @@ function renderTodayTable(){
   tbody.innerHTML="";
   const showActual = $("toggleActual").checked;
 
-  todayRows.forEach((r, idx)=>{
+  todayRows.forEach((r)=>{
     const tr=document.createElement("tr");
     tr.appendChild(el("td",{html:r.name}));
     tr.appendChild(el("td",{html:r.part}));
     tr.appendChild(el("td",{class:"right",html:r.sets}));
-
     tr.appendChild(el("td",{class:"right",html:r.targetW}));
     tr.appendChild(el("td",{class:"right",html:r.targetR}));
 
@@ -758,22 +764,21 @@ function renderTodaySummary(){
   $("todaySummary").textContent = out.trim();
 }
 
-/** Save Today -> Log (and update Plan) */
-$("btnSaveToday").addEventListener("click", ()=>{
+/** Save Today -> Log (and update Plan) + Sheet backup */
+$("btnSaveToday").addEventListener("click", async ()=>{
   if(todayRows.length===0) return alert("오늘 루틴을 먼저 생성해.");
   const date = $("todayDate").value || todayISO();
   const split = $("todaySplit").value || "무분할";
   const showActual = $("toggleActual").checked;
 
-  // Save only rows with result selected
   const selected = todayRows.filter(r=>r.result==="성공" || r.result==="실패");
   if(selected.length===0) return alert("결과를 선택한 운동이 없습니다.");
 
+  const rowsForSheet = [];
+
   selected.forEach(r=>{
-    // determine performed values: either actual(when provided) else target
     const w = (showActual && r.actualW!=="") ? num(r.actualW) : num(r.targetW);
     const reps = (showActual && r.actualR!=="") ? int(r.actualR) : int(r.targetR);
-
     const sets = int(r.sets);
     const vol = sets * w * reps;
 
@@ -789,12 +794,33 @@ $("btnSaveToday").addEventListener("click", ()=>{
       volume: vol
     });
 
-    // update progression based on result
+    rowsForSheet.push({
+      date, split,
+      part: r.part,
+      exercise: r.name,
+      sets, weight: w, reps,
+      result: r.result,
+      volume: vol
+    });
+
     applyResult(r.name, r.result);
   });
 
   saveState();
-  toast("저장 완료");
+
+  // ✅ 구글시트(Log)로 백업 (실패해도 로컬은 살아있음)
+  if (SHEET_SYNC.enabled && SHEET_SYNC.token && SHEET_SYNC.token !== "CHANGE_ME_TO_YOUR_TOKEN_40CHARS_PLUS") {
+    try {
+      const res = await sheetJsonp("appendLog", { rows: rowsForSheet });
+      if (!res.ok) throw new Error(res.error || "sheet_fail");
+      toast("저장 완료 + 시트 백업 OK");
+    } catch (e) {
+      toast("로컬 저장 OK / 시트 백업 실패");
+    }
+  } else {
+    toast("저장 완료(로컬) / 시트백업 토큰 미설정");
+  }
+
   renderAll();
 });
 
@@ -878,7 +904,6 @@ function drawLineChart(canvas, labels, values, title){
   const innerW = W - pad*2;
   const innerH = H - pad*2;
 
-  // title
   ctx.fillStyle = "rgba(230,237,243,.9)";
   ctx.font = `${14*devicePixelRatio}px system-ui`;
   ctx.fillText(title, pad, pad*0.65);
@@ -894,7 +919,6 @@ function drawLineChart(canvas, labels, values, title){
   const max = Math.max(...values);
   const range = (max-min) || 1;
 
-  // axes
   ctx.strokeStyle="rgba(255,255,255,.10)";
   ctx.lineWidth=1*devicePixelRatio;
   ctx.beginPath();
@@ -903,7 +927,6 @@ function drawLineChart(canvas, labels, values, title){
   ctx.lineTo(W-pad, pad);
   ctx.stroke();
 
-  // grid + y labels
   ctx.fillStyle="rgba(154,164,178,.8)";
   ctx.font = `${11*devicePixelRatio}px system-ui`;
   for(let i=0;i<=4;i++){
@@ -914,7 +937,6 @@ function drawLineChart(canvas, labels, values, title){
     ctx.fillText(val.toFixed(0), 10*devicePixelRatio, y+4*devicePixelRatio);
   }
 
-  // line
   ctx.strokeStyle="rgba(122,162,247,.9)";
   ctx.lineWidth=2*devicePixelRatio;
   ctx.beginPath();
@@ -925,7 +947,6 @@ function drawLineChart(canvas, labels, values, title){
   });
   ctx.stroke();
 
-  // dots
   ctx.fillStyle="rgba(122,162,247,.9)";
   values.forEach((v,i)=>{
     const x = pad + innerW*(i/(values.length-1 || 1));
@@ -933,7 +954,6 @@ function drawLineChart(canvas, labels, values, title){
     ctx.beginPath(); ctx.arc(x,y,3*devicePixelRatio,0,Math.PI*2); ctx.fill();
   });
 
-  // x labels (sparse)
   ctx.fillStyle="rgba(154,164,178,.75)";
   const step = Math.ceil(values.length/6);
   for(let i=0;i<labels.length;i+=step){
@@ -955,7 +975,6 @@ function renderCharts(){
   if(ex) rows = rows.filter(r=>r.exercise===ex);
   rows.sort((a,b)=> a.date.localeCompare(b.date));
 
-  // aggregate by date for selected exercise
   const byDate = new Map();
   rows.forEach(r=>{
     const k=r.date;
@@ -980,7 +999,6 @@ function renderCharts(){
   drawLineChart($("chart"), labels, vals, title);
   $("chartHint").textContent = ex ? "무게/반복은 기록된 값의 평균(일자 기준), 볼륨은 합계" : "";
 
-  // total volume per day
   const totalMap = new Map();
   state.log.forEach(r=>{
     totalMap.set(r.date, (totalMap.get(r.date)||0) + r.volume);
@@ -1014,8 +1032,35 @@ $("btnResetAll").addEventListener("click", ()=>{
   state = loadState();
   saveState(); renderAll();
 });
+
+$("btnSaveMetaToSheet").addEventListener("click", async ()=>{
+  if (!SHEET_SYNC.enabled) return alert("시트 백업이 꺼져있음");
+  try{
+    const meta = { splits: state.splits, parts: state.parts, exercises: state.exercises, plan: state.plan };
+    const res = await sheetJsonp("saveMeta", { meta });
+    if(!res.ok) throw new Error(res.error||"fail");
+    toast("설정/플랜 시트 저장 OK");
+  }catch(e){
+    toast("시트 저장 실패");
+  }
+});
+
+$("btnRestoreMetaFromSheet").addEventListener("click", async ()=>{
+  if (!SHEET_SYNC.enabled) return alert("시트 백업이 꺼져있음");
+  try{
+    const res = await sheetJsonp("getMeta", {});
+    if(!res.ok || !res.meta) return alert("시트에 저장된 Meta가 없음");
+    state.splits = res.meta.splits || state.splits;
+    state.parts = res.meta.parts || state.parts;
+    state.exercises = res.meta.exercises || state.exercises;
+    state.plan = res.meta.plan || state.plan;
+    saveState(); renderAll(); toast("시트에서 복구 OK");
+  }catch(e){
+    toast("시트 복구 실패");
+  }
+});
+
 $("btnSeed").addEventListener("click", ()=>{
-  // seed: minimal full-body list
   if(Object.keys(state.exercises).length>0 && !confirm("이미 운동이 있습니다. 덮어쓰지 않고 추가할까요?")) return;
   if(!state.splits.includes("무분할")) state.splits.push("무분할");
   const add = (name,part,startW,minR,maxR,inc,sets,split="무분할")=>{
@@ -1025,11 +1070,8 @@ $("btnSeed").addEventListener("click", ()=>{
   add("벤치프레스","가슴",50,6,10,2.5,3);
   add("랫풀다운","등",45,8,12,5,3);
   add("오버헤드프레스","어깨",30,5,8,2.5,3);
-  add("사레레","어깨",8,12,20,1,2);
   add("바벨컬","팔",20,8,12,2.5,2);
-  add("푸시다운","팔",25,8,12,2.5,2);
   add("레그프레스","하체",100,6,10,5,3);
-  add("RDL","하체",60,6,10,5,2);
   add("레그레이즈","코어",0,10,15,0,2);
   saveState(); renderAll(); toast("기본 세트 추가");
 });
@@ -1056,7 +1098,6 @@ function renderAll(){
     if(v==="무분할" && state.splits.length===1) return alert("마지막 분할은 삭제 불가");
     if(!confirm(`분할 삭제? ${v}`)) return;
     state.splits = state.splits.filter(x=>x!==v);
-    // also adjust exercises with that split
     Object.values(state.exercises).forEach(ex=>{ if(ex.split===v) ex.split=state.splits[0]||"무분할"; });
     saveState(); renderAll();
   });
@@ -1066,14 +1107,19 @@ function renderAll(){
     Object.values(state.exercises).forEach(ex=>{ if(ex.part===v) ex.part=state.parts[0]||"기타"; });
     saveState(); renderAll();
   });
+
   renderLogTable();
   renderPlanTable();
   renderCharts();
+
+  // hint
+  $("sheetSyncHint").textContent =
+    (SHEET_SYNC.enabled && SHEET_SYNC.token && SHEET_SYNC.token !== "CHANGE_ME_TO_YOUR_TOKEN_40CHARS_PLUS")
+      ? "✅ 저장 시 Log 시트에 자동 백업"
+      : "⚠️ 시트 백업 토큰 미설정";
 }
 
 renderAll();
-
-// default split chip
 $("todaySplit").value = state.splits[0] || "무분할";
 renderTodayChips();
 </script>
